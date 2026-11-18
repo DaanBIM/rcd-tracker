@@ -1,0 +1,55 @@
+import { describe, expect, it } from "vitest";
+import seedJson from "../domain/__fixtures__/testpoule-seed.json";
+import type { SeedData } from "@/lib/domain/seed";
+import { initialData } from "./initial";
+import { toPublic } from "./public";
+
+describe("kijkversie voor gasten", () => {
+  const files = initialData(seedJson as SeedData);
+  files["players.json"].players[17] = {
+    ...files["players.json"].players[17],
+    name: "Geheime Naam",
+    aliases: ["Bijnaam"],
+    clubName: "Naam, Geheime",
+    number: 13,
+  };
+  files["players.json"].players[0] = { ...files["players.json"].players[0], number: 9 };
+  files["entries.json"].entries.m = { matchId: "m", attendance: [], stats: {}, keeperId: null, opponentOwnGoals: 0, injured: ["p1"] };
+  files["feedback.json"].items.push({
+    id: "1",
+    createdAt: "",
+    page: "/",
+    width: 1,
+    text: "privé opmerking",
+    status: "open",
+  });
+  files["scouting.json"] = {
+    votes: Array.from({ length: 8 }, (_, i) => ({ a: "p2", b: "p3", attr: "SNE" as const, winner: (i % 2 ? "a" : "b") as "a" | "b", at: `t${i}` })),
+  };
+  const pub = toPublic(files);
+  const json = JSON.stringify(pub);
+
+  it("bevat geen namen van afgeschermde spelers, bijnamen of feedback", () => {
+    expect(json).not.toContain("Geheime");
+    expect(json).not.toContain("Bijnaam");
+    expect(json).not.toContain("privé opmerking");
+    expect(pub["players.json"].players[17]).toMatchObject({ name: null, hiddenNo: 1 });
+  });
+
+  it("geen blessures, en geen rugnummer bij afgeschermde spelers", () => {
+    expect(pub["entries.json"].entries.m).not.toHaveProperty("injured");
+    expect(pub["players.json"].players[17]).not.toHaveProperty("number");
+    expect(pub["players.json"].players[0].number).toBe(9);
+  });
+
+  it("houdt de rest gelijk: stand, wedstrijden, gewone spelers", () => {
+    expect(pub["matches.json"]).toEqual(files["matches.json"]);
+    expect(pub["standings.json"]).toEqual(files["standings.json"]);
+    expect(pub["players.json"].players[0].name).toBe("Luuk Smit");
+  });
+
+  it("van de inschatting alleen de basiscijfers, niet de keuzes", () => {
+    expect(pub["scouting.json"].votes).toEqual([]);
+    expect(json).not.toContain('"winner"');
+  });
+});

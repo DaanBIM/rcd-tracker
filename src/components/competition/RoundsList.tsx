@@ -1,0 +1,462 @@
+"use client";
+
+import Link from "next/link";
+import { TeamLogo } from "@/components/TeamLogo";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useData } from "@/components/DataProvider";
+import { Score } from "@/components/ui";
+import { predict } from "@/lib/domain/model";
+import { buildRounds, isRoundDone, ourMatch, splitRounds, type RoundGroup } from "@/lib/domain/rounds";
+import { isOurs, isPlayed, opponent, ourScore, outcome, US } from "@/lib/domain/types";
+import { fmtDate, pct, todayNL } from "@/lib/format";
+import { hasPrediction, nextMatch, type AppView, type ViewMatch } from "@/lib/store/view";
+import { TEAM } from "@/lib/club";
+
+const OPEN_KEY = "p4-open-rounds";
+const ONLY_OURS_KEY = "p4-only-ours";
+const COLLAPSED_KEY = "p4-collapsed-sections";
+
+function loadOpen(): string[] | null {
+  try {
+    const raw = localStorage.getItem(OPEN_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveOpen(keys: string[]) {
+  try {
+    localStorage.setItem(OPEN_KEY, JSON.stringify(keys));
+  } catch {
+    // niet onthouden is geen probleem
+  }
+}
+
+export function RoundsList() {
+  const { view, mutate, readOnly } = useData();
+  const router = useRouter();
+  const groups = buildRounds(view.matches);
+  const { upcoming, done, defaultOpen } = splitRounds(groups, todayNL());
+  const [open, setOpen] = useState<string[] | null>(null);
+  const [onlyOurs, setOnlyOurs] = useState(false);
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+
+  // Open/dicht per apparaat onthouden; standaard de eerstvolgende en de laatst gespeelde ronde
+  useEffect(() => {
+    queueMicrotask(() => {
+      setOpen(loadOpen() ?? defaultOpen);
+      try {
+        setOnlyOurs(localStorage.getItem(ONLY_OURS_KEY) === "1");
+        setCollapsed(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]") as string[]);
+      } catch {
+        // geen opslag: standaard alle wedstrijden tonen
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- alleen bij openen van het scherm
+  }, []);
+
+  const toggle = (key: string, isOpen: boolean) => {
+    setOpen((cur) => {
+      const next = (cur ?? []).filter((k) => k !== key).concat(isOpen ? [key] : []);
+      saveOpen(next);
+      return next;
+    });
+  };
+
+  async function addMatch() {
+    const last = view.matches
+      .filter((m) => isOurs(m) && !isPlayed(m) && m.date)
+      .map((m) => m.date!)
+      .sort()
+      .at(-1);
+    const date = last ? new Date(new Date(`${last}T12:00`).getTime() + 7 * 864e5).toISOString().slice(0, 10) : null;
+    const id = `extra-${Date.now().toString(36)}`;
+    await mutate(
+      "overrides.json",
+      (o) => ({
+        ...o,
+        extra: [
+          ...o.extra,
+          {
+            id,
+            code: null,
+            round: null,
+            makeup: false,
+            date,
+            time: "12:30",
+            home: US,
+            away: "Tegenstander",
+            homeGoals: null,
+            awayGoals: null,
+            venue: null,
+            kind: "oefen",
+            status: "gepland",
+            source: "handmatig",
+          },
+        ],
+      }),
+      "wedstrijd toegevoegd",
+    );
+    router.push(`/competitie/?w=${id}&wijzigen=1`);
+  }
+
+  const toggleOnlyOurs = () =>
+    setOnlyOurs((v) => {
+      try {
+        localStorage.setItem(ONLY_OURS_KEY, v ? "0" : "1");
+      } catch {
+        // niet onthouden is geen probleem
+      }
+      return !v;
+    });
+
+  /** Hele blok "Komende" of "Gespeelde rondes" in- of uitklappen (onthouden per apparaat) */
+  const toggleSection = (key: "up" | "done") =>
+    setCollapsed((cur) => {
+      const next = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
+      try {
+        localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next));
+      } catch {
+        // niet onthouden is geen probleem
+      }
+      return next;
+    });
+
+  /** Naar een ronde springen vanuit de rondebalk: openklappen en ernaartoe scrollen */
+  const jump = (key: string) => {
+    const g = groups.find((x) => x.key === key);
+    const section = g && isRoundDone(g, todayNL()) ? "done" : "up";
+    if (collapsed.includes(section)) toggleSection(section);
+    setOpen((cur) => {
+      const next = (cur ?? []).includes(key) ? cur! : [...(cur ?? []), key];
+      saveOpen(next);
+      return next;
+    });
+    requestAnimationFrame(() =>
+      document.getElementById(`ronde-${key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
+
+  if (!open) return null;
+
+  // "Volgende" = de ronde van onze echte volgende wedstrijd (ook als die verplaatst is)
+  const nm = nextMatch(view);
+  const nextKey = (nm && groups.find((g) => g.matches.some((m) => m.id === nm.id))?.key) ?? defaultOpen[0];
+  return (
+    <>
+    <RoundBar groups={groups} nextKey={nextKey} onJump={jump} />
+    <label className="only-ours">
+      <input type="checkbox" checked={onlyOurs} onChange={toggleOnlyOurs} /> Alleen wedstrijden van {TEAM.name}
+    </label>
+    <div className="grid2" style={{ alignItems: "start" }}>
+      <section className="box">
+        <div className="box-h">
+          <SectionToggle label="Komende rondes" count={upcoming.length} closed={collapsed.includes("up")} onClick={() => toggleSection("up")} />
+          {!readOnly && (
+            <button className="btn sm" type="button" onClick={addMatch}>
+              + Wedstrijd
+            </button>
+          )}
+        </div>
+        {!collapsed.includes("up") && (
+          <div className="rnds">
+            {upcoming.map((g) => (
+              <Round key={g.key} g={g} view={view} open={open.includes(g.key)} onToggle={toggle} onlyOurs={onlyOurs} />
+            ))}
+          </div>
+        )}
+      </section>
+      <section className="box">
+        <div className="box-h">
+          <SectionToggle label="Gespeelde rondes" count={done.length} closed={collapsed.includes("done")} onClick={() => toggleSection("done")} />
+        </div>
+        {!collapsed.includes("done") && (
+          <div className="rnds">
+            {done.map((g) => (
+              <Round key={g.key} g={g} view={view} open={open.includes(g.key)} onToggle={toggle} onlyOurs={onlyOurs} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+    {!readOnly && <HiddenMatches />}
+    </>
+  );
+}
+
+function Round({
+  g,
+  view,
+  open,
+  onToggle,
+  onlyOurs,
+}: {
+  g: RoundGroup;
+  view: AppView;
+  open: boolean;
+  onToggle: (key: string, open: boolean) => void;
+  onlyOurs: boolean;
+}) {
+  const shown = onlyOurs ? g.matches.filter(isOurs) : g.matches;
+  const side = g.kind !== "ronde";
+  const o = ourMatch(g);
+  const label = g.kind === "ronde" ? `Ronde ${g.round}` : g.kind === "inhaal" ? "Inhaal" : "Extra";
+  const main = (
+    <>
+      <span className="rn" aria-label={label}>
+        {g.kind === "ronde" ? g.round : g.kind === "inhaal" ? "IN" : "+"}
+      </span>
+      <span className="rt">
+        {/* Datum en aftrap van ónze wedstrijd (kan verplaatst zijn), anders van de ronde */}
+        <span className="rd">
+          {(o?.date ?? g.date) ? fmtDate(o?.date ?? g.date).full : "datum onbekend"}
+          {o?.time && !isPlayed(o) ? ` · ${o.time}` : ""}
+          {o && !isPlayed(o) && o.date && g.date && o.date !== g.date ? " · verplaatst" : ""}
+        </span>
+        <span className="rl">
+          <Summary g={g} view={view} />
+        </span>
+      </span>
+    </>
+  );
+
+  return (
+    <div id={`ronde-${g.key}`} className={`rnd${side ? " side" : ""}${open ? " open" : ""}`}>
+      <div className="rnd-row">
+        {/* Grootste deel: direct naar onze wedstrijd; het pijltje rechts klapt de hele ronde open */}
+        {o ? (
+          <Link className="rnd-main" href={`/competitie/?w=${encodeURIComponent(o.id)}`}>
+            {main}
+          </Link>
+        ) : (
+          <button type="button" className="rnd-main" onClick={() => onToggle(g.key, !open)}>
+            {main}
+          </button>
+        )}
+        <button
+          type="button"
+          className="rnd-exp"
+          aria-expanded={open}
+          aria-label={`${open ? "Verberg" : "Toon"} alle wedstrijden van ${label.toLowerCase()}`}
+          onClick={() => onToggle(g.key, !open)}
+        >
+          <span className="chev" aria-hidden="true" />
+        </button>
+      </div>
+      <div className={`reveal ${open ? "on" : ""}`}>
+        <div>
+          <div className="rnd-b">
+            {shown.map((m) => (
+              <MatchRow key={m.id} m={m as ViewMatch} view={view} />
+            ))}
+            {!shown.length && <div className="prow2 muted">{TEAM.name} speelt deze ronde niet.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Summary({ g, view }: { g: RoundGroup; view: AppView }) {
+  const o = ourMatch(g);
+  if (!o) {
+    return (
+      <>
+        <span className="rs-us muted">{g.kind === "inhaal" ? "" : `${TEAM.club} vrij`}</span>
+        <span />
+      </>
+    );
+  }
+  const score = ourScore(o);
+  let chip: React.ReactNode;
+  if (score) chip = <Score home={o.homeGoals!} away={o.awayGoals!} ours={score} />;
+  else if (!o.date) chip = <span className="rs-tag">niet ingepland</span>;
+  else if (hasPrediction(view, o))
+    chip = <span className="rs-pct">{pct(predict(view.model, US, opponent(o), o.home === US).win)}%</span>;
+  else chip = <span className="rs-tag">{o.time ?? ""}</span>;
+
+  return (
+    <>
+      <span className="rs-us">
+        <span className={`ha ${o.home === US ? "h" : "a"}`}>{o.home === US ? "Thuis" : "Uit"}</span>
+        <TeamLogo team={opponent(o)} size={18} /> <b>{opponent(o)}</b>
+      </span>
+      {chip}
+    </>
+  );
+}
+
+function MatchRow({ m, view }: { m: ViewMatch; view: AppView }) {
+  const { readOnly } = useData();
+  const ours = isOurs(m);
+  const team = (t: string) => (
+    <span className={`tname ${t === US ? "us-t" : ""}`}>
+      <TeamLogo team={t} size={16} />
+      <span>{t}</span>
+    </span>
+  );
+
+  let right: React.ReactNode;
+  if (isPlayed(m)) right = <Score home={m.homeGoals} away={m.awayGoals} ours={ours ? ourScore(m)! : undefined} />;
+  else if (ours && hasPrediction(view, m))
+    right = (
+      <span className="pct">
+        {pct(predict(view.model, US, opponent(m), m.home === US).win)}%<small>winkans</small>
+      </span>
+    );
+  else right = <span className="time">{m.time ?? ""}</span>;
+
+  let sub: React.ReactNode = null;
+  if (ours) {
+    if (isPlayed(m)) {
+      const e = view.entries[m.id];
+      sub = e ? (
+        `${e.attendance.length} aanwezig · stats ingevoerd`
+      ) : m.kind === "competitie" && !readOnly ? (
+        <span className="todo">Opstelling en stats invoeren</span>
+      ) : (
+        m.kind
+      );
+    } else {
+      sub = (
+        <>
+          {m.date ? (m.time ?? "tijd onbekend") : "niet ingepland"}
+          {m.venue ? ` · ${m.venue}` : ""}
+          {m.kind !== "competitie" ? ` · ${m.kind}` : ""}
+          {m.edited && (
+            <>
+              {" · "}
+              <span className="todo">aangepast</span>
+            </>
+          )}
+        </>
+      );
+    }
+  }
+
+  const inner = (
+    <>
+      <div>
+        <div className="pm">
+          {team(m.home)} <span className="muted">–</span> {team(m.away)}
+        </div>
+        {sub && <div className="meta">{sub}</div>}
+      </div>
+      {right}
+    </>
+  );
+
+  return ours ? (
+    <Link className="prow2 ours" href={`/competitie/?w=${encodeURIComponent(m.id)}`}>
+      {inner}
+    </Link>
+  ) : (
+    <div className="prow2">{inner}</div>
+  );
+}
+
+/** Rondebalk 1–22: kleur = uitslag van RCD, rode rand = eerstvolgende ronde */
+function RoundBar({
+  groups,
+  nextKey,
+  onJump,
+}: {
+  groups: RoundGroup[];
+  nextKey: string | undefined;
+  onJump: (key: string) => void;
+}) {
+  const rounds = groups
+    .filter((g): g is Extract<RoundGroup, { kind: "ronde" }> => g.kind === "ronde")
+    .sort((a, b) => a.round - b.round);
+
+  return (
+    <nav className="roundbar" aria-label="Spring naar ronde">
+      {rounds.map((g) => {
+        const o = ourMatch(g);
+        const score = o ? ourScore(o) : null;
+        // Verplaatst: onze wedstrijd is niet gespeeld en staat (nog) niet op de rondedatum
+        const moved = !!o && !score && (!o.date || (!!g.date && o.date !== g.date));
+        const cls = score ? outcome(score[0], score[1]) : moved ? "moved" : !o ? "free" : "";
+        const label = score
+          ? `Ronde ${g.round}: ${score[0]}-${score[1]}`
+          : o
+            ? `Ronde ${g.round}: ${opponent(o)}${moved ? (o.date ? ` (verplaatst naar ${fmtDate(o.date).full})` : " (verplaatst, nog geen datum)") : ""}`
+            : `Ronde ${g.round}: vrij`;
+        return (
+          <button
+            key={g.key}
+            type="button"
+            className={`rb ${cls} ${g.key === nextKey ? "next" : ""}`}
+            onClick={() => onJump(g.key)}
+            aria-label={label}
+            title={label}
+          >
+            {g.round}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** Kop van een blok die het hele blok in- of uitklapt */
+function SectionToggle({
+  label,
+  count,
+  closed,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  closed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className="sec-toggle" aria-expanded={!closed} onClick={onClick}>
+      <span className="lbl">
+        {label} <span className="sec-count">{count}</span>
+      </span>
+      <span className={`chev ${closed ? "" : "up"}`} aria-hidden="true" />
+    </button>
+  );
+}
+
+/** Verwijderde wedstrijden van de clubsite terugzetten */
+function HiddenMatches() {
+  const { files, mutate } = useData();
+  const hidden = files["overrides.json"].hidden ?? [];
+  const [open, setOpen] = useState(false);
+  if (!hidden.length) return null;
+  const label = (id: string) => {
+    const m = files["matches.json"].matches.find((x) => x.id === id);
+    return m ? `${m.home} – ${m.away}${m.date ? ` (${fmtDate(m.date).full})` : ""}` : id;
+  };
+  return (
+    <div className="meta" style={{ marginTop: 14 }}>
+      <button className="link" type="button" onClick={() => setOpen((o) => !o)}>
+        {hidden.length} verwijderde wedstrijd{hidden.length > 1 ? "en" : ""}
+      </button>
+      {open &&
+        hidden.map((id) => (
+          <div className="ev" key={id}>
+            <span>{label(id)}</span>
+            <button
+              className="link"
+              type="button"
+              onClick={() =>
+                void mutate(
+                  "overrides.json",
+                  (o) => ({ ...o, hidden: (o.hidden ?? []).filter((x) => x !== id) }),
+                  `wedstrijd teruggezet: ${label(id)}`,
+                )
+              }
+            >
+              terugzetten
+            </button>
+          </div>
+        ))}
+    </div>
+  );
+}

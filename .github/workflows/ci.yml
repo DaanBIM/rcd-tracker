@@ -1,0 +1,32 @@
+# Controleert bij elke wijziging dat de app voor beide teams bouwt en dat de tests slagen.
+# Online zetten gebeurt apart (zie docs/CLOUDFLARE.md): de site heeft een login en een privé
+# data-repository nodig, dus GitHub Pages is hier niet bedoeld.
+name: Controle
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        team: [o13-1, o10-2]
+    env:
+      NEXT_PUBLIC_TEAM: ${{ matrix.team }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npx next typegen && npm run typecheck
+      - run: npm test
+      - run: npm run build

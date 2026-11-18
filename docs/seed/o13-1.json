@@ -1,0 +1,167 @@
+{
+  "bron": "https://www.rksvrcd.nl/rcd-jo13-1-ve-zaterdag-speeldag-man (stand, programma, uitslagen), peildatum 2026-11-18",
+  "peildatum": "2026-11-18T07:25:49.160Z",
+  "team": {
+    "naam": "RCD O13-1",
+    "teampagina": "https://www.rksvrcd.nl/rcd-jo13-1-ve-zaterdag-speeldag-man"
+  },
+  "stand": [
+    {
+      "positie": 1,
+      "team": "Unitas O13-1",
+      "gespeeld": 4,
+      "winst": 3,
+      "gelijk": 0,
+      "verlies": 1,
+      "punten": 9,
+      "voor": 9,
+      "tegen": 6
+    },
+    {
+      "positie": 2,
+      "team": "Madese Boys O13-1",
+      "gespeeld": 3,
+      "winst": 2,
+      "gelijk": 0,
+      "verlies": 1,
+      "punten": 6,
+      "voor": 5,
+      "tegen": 3
+    },
+    {
+      "positie": 3,
+      "team": "Drechtstreek O13-1",
+      "gespeeld": 3,
+      "winst": 2,
+      "gelijk": 0,
+      "verlies": 1,
+      "punten": 6,
+      "voor": 5,
+      "tegen": 4
+    },
+    {
+      "positie": 4,
+      "team": "Wieldrecht O13-1",
+      "gespeeld": 4,
+      "winst": 2,
+      "gelijk": 0,
+      "verlies": 2,
+      "punten": 6,
+      "voor": 13,
+      "tegen": 9
+    },
+    {
+      "positie": 5,
+      "team": "Sliedrecht O13-1",
+      "gespeeld": 4,
+      "winst": 1,
+      "gelijk": 2,
+      "verlies": 1,
+      "punten": 5,
+      "voor": 4,
+      "tegen": 7
+    },
+    {
+      "positie": 6,
+      "team": "VVGZ O13-1",
+      "gespeeld": 3,
+      "winst": 1,
+      "gelijk": 1,
+      "verlies": 1,
+      "punten": 4,
+      "voor": 6,
+      "tegen": 6
+    },
+    {
+      "positie": 7,
+      "team": "RCD O13-1",
+      "gespeeld": 4,
+      "winst": 1,
+      "gelijk": 1,
+      "verlies": 2,
+      "punten": 4,
+      "voor": 9,
+      "tegen": 11
+    },
+    {
+      "positie": 8,
+      "team": "Theole O13-2",
+      "gespeeld": 3,
+      "winst": 0,
+      "gelijk": 0,
+      "verlies": 3,
+      "punten": 0,
+      "voor": 3,
+      "tegen": 8
+    }
+  ],
+  "wedstrijden": [
+    {
+      "ronde": null,
+      "inhaal": false,
+      "datum": "2026-11-07",
+      "tijd": null,
+      "thuis": "RCD O13-1",
+      "uit": "Wieldrecht O13-1",
+      "uitslag_thuis": 3,
+      "uitslag_uit": 5,
+      "sportpark": null,
+      "ons": true,
+      "status": "gespeeld"
+    },
+    {
+      "ronde": null,
+      "inhaal": false,
+      "datum": "2026-11-14",
+      "tijd": null,
+      "thuis": "Madese Boys O13-1",
+      "uit": "RCD O13-1",
+      "uitslag_thuis": 2,
+      "uitslag_uit": 1,
+      "sportpark": null,
+      "ons": true,
+      "status": "gespeeld"
+    },
+    {
+      "ronde": null,
+      "inhaal": false,
+      "datum": "2026-11-21",
+      "tijd": "10:00",
+      "thuis": "RCD O13-1",
+      "uit": "Unitas O13-1",
+      "uitslag_thuis": null,
+      "uitslag_uit": null,
+      "sportpark": null,
+      "ons": true,
+      "status": "gepland"
+    },
+    {
+      "ronde": null,
+      "inhaal": false,
+      "datum": "2026-11-28",
+      "tijd": "10:45",
+      "thuis": "RCD O13-1",
+      "uit": "VVGZ O13-1",
+      "uitslag_thuis": null,
+      "uitslag_uit": null,
+      "sportpark": null,
+      "ons": true,
+      "status": "gepland"
+    },
+    {
+      "ronde": null,
+      "inhaal": false,
+      "datum": "2026-12-05",
+      "tijd": "08:30",
+      "thuis": "Drechtstreek O13-1",
+      "uit": "RCD O13-1",
+      "uitslag_thuis": null,
+      "uitslag_uit": null,
+      "sportpark": null,
+      "ons": true,
+      "status": "gepland"
+    }
+  ],
+  "spelers": [],
+  "sportparken": {}
+}

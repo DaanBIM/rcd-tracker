@@ -1,0 +1,65 @@
+{
+  "bron": "https://www.rksvrcd.nl/rcd-jo10-2-ve-zaterdag-speeldag-man (stand, programma, uitslagen), peildatum 2026-11-18",
+  "peildatum": "2026-11-18T07:25:52.391Z",
+  "team": {
+    "naam": "RCD O10-2",
+    "teampagina": "https://www.rksvrcd.nl/rcd-jo10-2-ve-zaterdag-speeldag-man"
+  },
+  "stand": [],
+  "wedstrijden": [
+    {
+      "ronde": null,
+      "inhaal": false,
+      "datum": "2026-11-21",
+      "tijd": "10:00",
+      "thuis": "ASWH O10-7",
+      "uit": "RCD O10-2",
+      "uitslag_thuis": null,
+      "uitslag_uit": null,
+      "sportpark": null,
+      "ons": true,
+      "status": "gepland"
+    },
+    {
+      "ronde": null,
+      "inhaal": false,
+      "datum": "2026-11-28",
+      "tijd": "10:10",
+      "thuis": "IFC O10-2",
+      "uit": "RCD O10-2",
+      "uitslag_thuis": null,
+      "uitslag_uit": null,
+      "sportpark": null,
+      "ons": true,
+      "status": "gepland"
+    },
+    {
+      "ronde": null,
+      "inhaal": false,
+      "datum": "2026-12-05",
+      "tijd": "09:00",
+      "thuis": "RCD O10-2",
+      "uit": "SSW O10-1",
+      "uitslag_thuis": null,
+      "uitslag_uit": null,
+      "sportpark": null,
+      "ons": true,
+      "status": "gepland"
+    },
+    {
+      "ronde": null,
+      "inhaal": false,
+      "datum": "2026-12-12",
+      "tijd": "11:00",
+      "thuis": "RCD O10-2",
+      "uit": "Wieldrecht O10-2",
+      "uitslag_thuis": null,
+      "uitslag_uit": null,
+      "sportpark": null,
+      "ons": true,
+      "status": "gepland"
+    }
+  ],
+  "spelers": [],
+  "sportparken": {}
+}

@@ -1,0 +1,45 @@
+import { scoutBase } from "@/lib/domain/scouting";
+import type { DataFiles } from "./schema";
+import { APP_REPO, TEAM } from "@/lib/club";
+
+/**
+ * Kijkversie voor gasten. Staat openbaar (branch "kijk" van de app-repository), dus:
+ * - afgeschermde spelers zonder naam (ze staan om privacyredenen niet op de clubsite)
+ * - geen bijnamen, clubsite-namen of feedback
+ * - van de inschatting vooraf alleen de basiscijfers, niet de keuzes of cijfers per onderdeel
+ * - geen blessures, en geen rugnummer bij afgeschermde spelers (daarmee zijn ze te herkennen)
+ */
+export const PUBLIC_REF = { owner: APP_REPO.owner, repo: APP_REPO.repo, branch: "kijk", path: `kijk-${TEAM.key}.json` };
+export const PUBLIC_URL = `https://raw.githubusercontent.com/${PUBLIC_REF.owner}/${PUBLIC_REF.repo}/${PUBLIC_REF.branch}/${PUBLIC_REF.path}`;
+
+export function toPublic(files: DataFiles): DataFiles {
+  return {
+    ...files,
+    "players.json": {
+      players: files["players.json"].players.map((p) => ({
+        id: p.id,
+        name: p.hiddenNo ? null : p.name,
+        position: p.position,
+        type: p.type,
+        hiddenNo: p.hiddenNo,
+        active: p.active,
+        clubName: null,
+        ...(p.number != null && !p.hiddenNo ? { number: p.number } : {}),
+        ...(p.role ? { role: p.role } : {}),
+        ...(p.side ? { side: p.side } : {}),
+      })),
+    },
+    "entries.json": {
+      entries: Object.fromEntries(
+        Object.entries(files["entries.json"].entries).map(([id, e]) => {
+          const rest = { ...e };
+          delete rest.injured;
+          return [id, rest];
+        }),
+      ),
+    },
+    "feedback.json": { items: [] },
+    // Inschatting: alleen het basiscijfer per speler, niet wie tegen wie gekozen is
+    "scouting.json": { votes: [], base: scoutBase(files["scouting.json"]?.votes ?? [], files["players.json"].players) },
+  };
+}

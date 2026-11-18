@@ -1,0 +1,70 @@
+# Haalt de teampagina van __NAME__ op rksvrcd.nl op en werkt data/ bij (docs/PLAN-peursum.md §5.2).
+# Het script beslist zelf of het echt ophaalt (Nederlandse tijd, ronde compleet?).
+name: Ophalen clubsite
+
+on:
+  schedule:
+    # Zaterdag: elk uur 10:00–23:00 Nederlandse tijd (jeugd speelt 's ochtends; UTC-tijden dekken zomer- en wintertijd)
+    - cron: "5 8-22 * * 6"
+    # Zondag: 08, 12, 16 en 20 uur Nederlandse tijd
+    - cron: "5 6,7,10,11,14,15,18,19 * * 0"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Altijd ophalen (Nu verversen)"
+        default: "true"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Data ophalen
+        uses: actions/checkout@v5
+        with:
+          path: repo
+
+      # Is de app-repository privé, dan is het geheim APP_READ_TOKEN nodig (alleen Contents: read op de app)
+      - name: App-code ophalen
+        uses: actions/checkout@v5
+        with:
+          repository: DaanBIM/rcd-tracker
+          path: app
+          token: ${{ secrets.APP_READ_TOKEN || github.token }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Afhankelijkheden
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+
+      - name: Clubsite verwerken
+        working-directory: app
+        env:
+          NEXT_PUBLIC_TEAM: __TEAM__
+        run: npx tsx scripts/sync.ts --data ../repo/data ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
+
+      - name: Opslaan
+        working-directory: repo
+        run: |
+          git config user.name "rcd-tracker-sync"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then echo "Geen wijzigingen"; exit 0; fi
+          git commit -m "sync: $(jq -r .message data/sync.json | cut -c1-200)"
+          for i in 1 2 3; do
+            git pull --rebase && git push && exit 0
+            sleep 5
+          done
+          exit 1

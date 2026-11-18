@@ -1,0 +1,293 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { playerImpacts } from "@/lib/domain/awards";
+import { playerCards } from "@/lib/domain/playercard";
+import { MON_FULL } from "@/lib/format";
+import { cardMarks } from "./cardMarks";
+import { useSpecial } from "./reveal";
+import { createPortal } from "react-dom";
+import { ROLES } from "@/lib/domain/season-stats";
+import { playerLabel, POSITION_ROLE, ROLE_POSITION, type Role } from "@/lib/domain/types";
+import { todayNL } from "@/lib/format";
+import type { StoredPlayer } from "@/lib/store/schema";
+import { Badges } from "./Badges";
+import { useData } from "./DataProvider";
+import { PlayerCardSvg } from "./PlayerCardSvg";
+import { PlayerSeasonStats } from "./PlayerSeasonStats";
+import { playerSeason } from "@/lib/domain/season-stats";
+
+const monthLabel = (ym: string) => MON_FULL[Number(ym.slice(5, 7)) - 1];
+
+/**
+ * Spelerskaart schermvullend: de kaart groot in beeld, de rest wazig erachter.
+ * Naar beneden scrollen: de statistieken van het seizoen en (voor de eigenaar) bewerken.
+ */
+export function CardView({
+  playerId,
+  onClose,
+  variant,
+  banner,
+}: {
+  playerId: string;
+  onClose: () => void;
+  /** Andere kaart tonen dan normaal (bijv. blauw vanuit het team van het seizoen) */
+  variant?: "goud" | "inform" | "potm" | "tots";
+  banner?: string;
+}) {
+  const { view, mutate, readOnly } = useData();
+  const [editing, setEditing] = useState(false);
+  const special = useSpecial();
+  const p = view.players.find((x) => x.id === playerId);
+  // Kaart aan het eind van elke afgelopen maand (progressie door het seizoen)
+  const past = useMemo(() => {
+    const months = view.monthly.months.filter((m) => m < view.thisMonth);
+    return months
+      .map((m) => {
+        const upTo = view.rows.filter((r) => (r.match.date ?? "").slice(0, 7) <= m);
+        return { month: m, card: playerCards(upTo, view.players, playerImpacts(view.players, upTo), view.base)[playerId] };
+      })
+      .filter((h) => h.card && h.card.games > 0);
+  }, [view, playerId]);
+  const track = useRef<HTMLDivElement>(null);
+  const [slide, setSlide] = useState(0);
+  const onScroll = () => {
+    const el = track.current;
+    if (el) setSlide(Math.round(el.scrollLeft / el.clientWidth));
+  };
+  // Open op de kaart van nu (rechts)
+  useEffect(() => {
+    const el = track.current;
+    if (!el) return;
+    el.scrollLeft = el.scrollWidth;
+    queueMicrotask(() => setSlide(past.length));
+  }, [past.length]);
+  // Laatste sluitfunctie bewaren, zodat de stap in de geschiedenis niet bij elke weergave opnieuw gezet wordt
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
+  const card = view.cards[playerId];
+
+  // Terugknop/-veeg van de telefoon sluit de kaart (in plaats van de pagina te verlaten)
+  // (bestaande status van Next.js meenemen, anders herlaadt de pagina bij "terug"; even uitstellen zodat
+  // het dubbel aanroepen van effecten tijdens ontwikkelen geen extra stap in de geschiedenis geeft)
+  useEffect(() => {
+    let pushed = false;
+    const t = setTimeout(() => {
+      window.history.pushState({ ...window.history.state, card: playerId }, "");
+      pushed = true;
+    }, 0);
+    const pop = () => closeRef.current();
+    window.addEventListener("popstate", pop);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("popstate", pop);
+      if (pushed && window.history.state?.card === playerId) window.history.back();
+    };
+  }, [playerId]);
+
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", esc);
+    // Pagina erachter niet laten meescrollen
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", esc);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  if (!p || !card) return null;
+  const update = (patch: Partial<StoredPlayer>, msg: string) =>
+    mutate("players.json", (f) => ({ players: f.players.map((x) => (x.id === p.id ? { ...x, ...patch } : x)) }), msg);
+  const hattricks = playerSeason(p.id, view.rows, view.players, view.matches, view.entries).hattricks;
+
+  return createPortal(
+    <div className="cardview" role="dialog" aria-label={`Spelerskaart ${playerLabel(p)}`} onClick={onClose}>
+      {/* Duidelijk terug: knop bovenin (blijft staan bij scrollen) en de terugknop of -veeg van de telefoon */}
+      <div className="cv-top" onClick={(e) => (e.target === e.currentTarget ? onClose() : e.stopPropagation())}>
+        <button type="button" className="cv-back" onClick={onClose}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          Terug
+        </button>
+      </div>
+      {/* Naast de kaart tikken sluit hem ook; op de kaart, knoppen en statistieken zelf niet */}
+      <div
+        className="cv-body"
+        onClick={(e) => {
+          e.stopPropagation();
+          const t = e.target as Element;
+          if (t === e.currentTarget || t.matches(".cv-card, .cv-track, .cv-slide, .cv-badges, .cv-when")) onClose();
+        }}
+      >
+        <div className="cv-card">
+          {/* Veeg naar links/rechts: de kaart aan het eind van elke maand, rechts de kaart van nu */}
+          <div className="cv-track" ref={track} onScroll={onScroll}>
+            {past.map((h) => (
+              <div key={h.month} className="cv-slide">
+                <PlayerCardSvg card={h.card} player={p} gold={view.goldKeepers.has(p.id)} />
+              </div>
+            ))}
+            <div className="cv-slide">
+              <PlayerCardSvg
+                card={card}
+                player={p}
+                gold={view.goldKeepers.has(p.id)}
+                hattricks={hattricks}
+                variant={variant ?? special(p.id)?.variant}
+                banner={banner ?? special(p.id)?.banner}
+                marks={cardMarks(view, p.id)}
+              />
+            </div>
+          </div>
+          {past.length > 0 && (
+            <div className="cv-when">
+              <span className="news-dots">
+                {[...past.map((h) => h.month), "nu"].map((m, i) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-label={i === past.length ? "Nu" : `Eind ${monthLabel(m)}`}
+                    aria-current={i === slide}
+                    onClick={() => track.current?.scrollTo({ left: i * track.current.clientWidth, behavior: "smooth" })}
+                  />
+                ))}
+              </span>
+              <span className="cv-when-l">{slide >= past.length ? "Nu" : `Eind ${monthLabel(past[slide].month)}`}</span>
+            </div>
+          )}
+        </div>
+        <div className="cv-badges">
+          <Badges playerId={p.id} />
+        </div>
+        <span className="cv-hint" aria-hidden="true">
+          ↓ statistieken{past[slide] ? ` t/m ${monthLabel(past[slide].month)}` : ""}
+        </span>
+        {/* Teruggeveegd naar een eerdere maand: de statistieken van toen */}
+        <PlayerSeasonStats playerId={p.id} upTo={past[slide]?.month} card={past[slide]?.card} />
+
+        {!readOnly && (
+          <div className="cv-owner" key="owner">
+            {editing ? (
+              <EditPlayer p={p} update={update} onDone={() => setEditing(false)} />
+            ) : (
+              <div className="actions" style={{ marginTop: 0 }}>
+                <button className="btn sm" type="button" onClick={() => setEditing(true)}>
+                  Bewerken
+                </button>
+                <button
+                  className={`btn sm ${p.injured ? "primary" : ""}`}
+                  type="button"
+                  aria-pressed={!!p.injured}
+                  onClick={() =>
+                    void update(p.injured ? { injured: false, recoveredAt: todayNL() } : { injured: true }, `${p.injured ? "weer fit" : "geblesseerd"}: ${playerLabel(p)}`)
+                  }
+                >
+                  {p.injured ? "Weer fit" : "Geblesseerd"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        <button type="button" className="btn cv-done" onClick={onClose}>
+          Terug naar de lijst
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** Naam, rugnummer en vaste plek (GK, LB, CB, …); de plek bepaalt ook de linie */
+function EditPlayer({
+  p,
+  update,
+  onDone,
+}: {
+  p: StoredPlayer;
+  update: (patch: Partial<StoredPlayer>, msg: string) => Promise<boolean>;
+  onDone: () => void;
+}) {
+  const [name, setName] = useState(p.name ?? "");
+  const [no, setNo] = useState(p.number != null ? String(p.number) : "");
+  const [role, setRole] = useState<Role | "">(p.role ?? (p.position === "Onbekend" ? "" : POSITION_ROLE[p.position]));
+  const [side, setSide] = useState<"L" | "R" | "">(p.side ?? "");
+  const [armed, setArmed] = useState(false);
+
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 3000);
+    return () => clearTimeout(t);
+  }, [armed]);
+
+  function save(e: React.FormEvent) {
+    e.preventDefault();
+    const n = name.trim();
+    const num = no.trim() === "" ? null : Math.max(0, Math.min(99, Number.parseInt(no, 10)));
+    const patch: Partial<StoredPlayer> = {};
+    if (n && n !== p.name) patch.name = n;
+    if ((Number.isNaN(num) ? null : num) !== (p.number ?? null)) patch.number = Number.isNaN(num) ? null : num;
+    if ((role || null) !== (p.role ?? null)) {
+      patch.role = role || null;
+      patch.position = role ? ROLE_POSITION[role] : "Onbekend";
+    }
+    const newSide = role === "CV" && side ? side : null;
+    if (newSide !== (p.side ?? null)) patch.side = newSide;
+    if (Object.keys(patch).length) void update(patch, `speler: ${n || playerLabel(p)}`);
+    onDone();
+  }
+
+  return (
+    <form className="cv-edit" onSubmit={save}>
+      <label className="f">
+        Naam
+        <input type="text" value={name} placeholder={p.hiddenNo ? `Afgeschermd ${p.hiddenNo}` : ""} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="f">
+        Nummer
+        <input type="number" inputMode="numeric" min={0} max={99} value={no} onChange={(e) => setNo(e.target.value)} />
+      </label>
+      <label className="f wide">
+        Positie
+        <select value={role} onChange={(e) => setRole(e.target.value as Role | "")}>
+          <option value="">Onbekend</option>
+          {ROLES.map((r) => (
+            <option key={r.key} value={r.key}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {role === "CV" && (
+        <label className="f wide">
+          Kant centraal achterin
+          <select value={side} onChange={(e) => setSide(e.target.value as "L" | "R" | "")}>
+            <option value="">Geen vaste kant</option>
+            <option value="L">Links centraal</option>
+            <option value="R">Rechts centraal</option>
+          </select>
+        </label>
+      )}
+      <div className="actions wide" style={{ marginTop: 0 }}>
+        <button className="btn sm primary" type="submit">
+          Opslaan
+        </button>
+        <button className="btn sm" type="button" onClick={onDone}>
+          Annuleren
+        </button>
+        <button
+          className="btn sm"
+          type="button"
+          style={{ marginLeft: "auto" }}
+          onClick={() => (armed ? void update({ active: false }, `speler verwijderd: ${playerLabel(p)}`) : setArmed(true))}
+        >
+          {armed ? "Zeker?" : "Verwijderen"}
+        </button>
+      </div>
+    </form>
+  );
+}
