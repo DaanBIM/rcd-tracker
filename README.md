@@ -85,5 +85,6 @@ Wat anders is dan bij senioren:
 
 ## Open punten
 
+- CI: `docs/ci.yml.voorbeeld` moet naar `.github/workflows/ci.yml`; dat kan pas met een GitHub-sleutel met het recht `workflow` (`gh auth refresh -h github.com -s workflow`).
 - Online zetten: Cloudflare-project, Access-groep, GitHub-sleutel en de privé data-repository per team zijn nog niet aangemaakt.
 - Teamnamen op de kaarten en deelposts gebruiken `JO13-1`/`JO10-2` in de kopbalk, maar de clubsite schrijft `O13-1`/`O10-2`.

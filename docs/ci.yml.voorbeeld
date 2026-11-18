@@ -1,3 +1,4 @@
+# Zet dit bestand in .github/workflows/ci.yml (kan pas met een GitHub-sleutel met het recht "workflow").
 # Controleert bij elke wijziging dat de app voor beide teams bouwt en dat de tests slagen.
 # Online zetten gebeurt apart (zie docs/CLOUDFLARE.md): de site heeft een login en een privé
 # data-repository nodig, dus GitHub Pages is hier niet bedoeld.
